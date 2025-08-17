@@ -1,0 +1,75 @@
+Add-Type -AssemblyName System.Windows.Forms
+$SmtpServer = "smtp.office365.com"
+$Port = 587
+$Username = ""
+$Password = ""
+$date_ini = Get-Date -Format "dd-MM-yyyy HH:mm:ss"
+$pantallaPrincipalAncho = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+$pantallaPrincipalAlto = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+$FolderPath = "C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Backup"
+$FileNamePattern = "*.BAK"
+$FileNamePattern2 = "*.BAK"
+$FileNamePattern3 = "*.BAK"
+
+$Today = Get-Date -Format "dd-MM-yyyy"
+$Today2 = (Get-Date).Date
+$Today3 = Get-Date -Format "yyyy-MM-dd"
+
+$From = ""
+$To = "jhidalgo@marluk.cl" 
+$Cc = "@" #", @"
+$Subject = "Respaldo Softland $Today"
+
+$FilesFound = Get-ChildItem -Path $FolderPath | Where-Object {
+    ($_.LastWriteTime.Date -eq $Today3) -and `
+    ($_.Name -like $FileNamePattern -or $_.Name -like $FileNamePattern2 -or $_.Name -like $FileNamePattern3)
+}
+
+if ($FilesFound.Count -gt 2) {
+    $Subject = "Backup: Se efectuo respaldo de softland con fecha de ($Today)"
+    $Body = @"
+Hola,
+
+Este es un aviso automatico:
+
+
+Se encontraron archivos con el patron '$FileNamePattern' - '$FileNamePattern2' - '$FileNamePattern3' y la fecha de modificacion de $Today en la carpeta:
+
+$FolderPath
+
+
+- Resolucion Actual: $($pantallaPrincipalAncho)x$($pantallaPrincipalAlto)
+
+
+Saludos,
+"@
+
+        $Credential = New-Object System.Management.Automation.PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force))
+        Send-MailMessage -SmtpServer $SmtpServer -Port $Port -UseSsl -Credential $Credential -From $From -To $To -Cc $Cc -Subject $Subject -Body $Body
+#        Send-MailMessage -SmtpServer $SmtpServer -Port $Port -UseSsl -Credential $Credential -From $From -To $To -Subject $Subject -Body $Body
+ } else {
+
+    $Subject = "ALERTA: No se efectuo respaldo de softland $Today "
+    $Body = @"
+Hola,
+
+Este es un aviso automatico:
+
+Hoy : $Today
+
+NO se encontraron archivos con la fecha de modificacion de $Today en la carpeta:
+$FolderPath
+
+Favor revisar conexion de sonda remota y ultima resolucion asignada. 
+
+- Resolucion Actual: $($pantallaPrincipalAncho)x$($pantallaPrincipalAlto)
+
+.
+
+Saludos,
+"@
+
+        $Credential = New-Object System.Management.Automation.PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force))
+        Send-MailMessage -SmtpServer $SmtpServer -Port $Port -UseSsl -Credential $Credential -From $From -To $To -Cc $Cc -Subject $Subject -Body $Body
+#        Send-MailMessage -SmtpServer $SmtpServer -Port $Port -UseSsl -Credential $Credential -From $From -To $To -Subject $Subject -Body $Body
+}
