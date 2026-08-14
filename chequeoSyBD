@@ -1,0 +1,50 @@
+Add-Type -AssemblyName System.Windows.Forms
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+$Today = Get-Date -Format "dd-MM-yyyy"
+$Today3 = (Get-Date).AddDays(-1).ToString("yyyyMMdd")
+$SmtpServer = "smtp.office365.com"
+$Port = 587
+$Username = ""
+$Password = ""
+$date_ini = Get-Date -Format "dd-MM-yyyy HH:mm:ss"
+$FolderPath = "D:\BaseDatos-Diario\Sybase\Bacula\Base de datos\10.80.6.32\c$\Bacula\produccion"
+$FileNamePattern  = "BD_$Today3.dmp"
+$FileNamePattern2 = "master_$Today3.dmp"
+$FileNamePattern3 = "sybmgmtdb_$Today3.dmp"
+$From = ""
+$To   = ""
+$FilesFound = Get-ChildItem -Path $FolderPath | Where-Object {
+    $_.Name -eq $FileNamePattern -or 
+    $_.Name -eq $FileNamePattern2 -or 
+    $_.Name -eq $FileNamePattern3
+}
+if ($FilesFound.Count -ge 3) {
+    $Subject = "[SUCCESS] Se efectuo respaldo de Sybase con fecha de ($Today)"
+    $Body = @"
+Hola,
+Este es un aviso automatico:
+Se encontraron los 3 archivos de respaldo correspondientes a la fecha $Today3 en la carpeta:
+$FolderPath
+
+Archivos encontrados:
+$($FilesFound.Name -join "`n")
+
+Saludos,
+"@
+    $Credential = New-Object System.Management.Automation.PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force))
+    Send-MailMessage -SmtpServer $SmtpServer -Port $Port -UseSsl -Credential $Credential -From $From -To $To -Subject $Subject -Body $Body
+} else {
+    $Subject = "[ERROR] No se efectuo respaldo SYBASE $Today"
+    $Body = @"
+Hola,
+Este es un aviso automatico:
+Hoy : $Today
+NO se encontraron todos los archivos con fecha $Today3 en la carpeta:
+$FolderPath
+Revisar urgente proceso de respaldo.
+
+Saludos,
+"@
+    $Credential = New-Object System.Management.Automation.PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force))
+    Send-MailMessage -SmtpServer $SmtpServer -Port $Port -UseSsl -Credential $Credential -From $From -To $To -Subject $Subject -Body $Body
+}
