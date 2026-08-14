@@ -1,0 +1,110 @@
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+$Config = @{
+    ServiceName  = "IperiusSvc"
+    Server       = $env:COMPUTERNAME
+    WaitSeconds  = 5
+    Email = @{
+        SmtpServer = "smtp.office365.com"
+        Port       = 587
+        From       = ""
+        To         = @("")
+        User       = ""
+        Password   = ""
+    }
+}
+function Send-NotificationEmail {
+    param (
+        [string]$Subject,
+        [string]$Body
+    )
+
+    $secPassword = ConvertTo-SecureString $Config.Email.Password -AsPlainText -Force
+    $credential  = New-Object System.Management.Automation.PSCredential($Config.Email.User, $secPassword)
+
+    $mailParams = @{
+        SmtpServer  = $Config.Email.SmtpServer
+        Port        = $Config.Email.Port
+        UseSsl      = $true
+        Credential  = $credential
+        From        = $Config.Email.From
+        To          = $Config.Email.To
+        Subject     = $Subject
+        Body        = $Body
+        ErrorAction = 'Stop'
+    }
+
+    try {
+        Send-MailMessage @mailParams
+        Write-Host "[OK] Notificación enviada correctamente a $($Config.Email.To -join ', ')" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[ERROR] No se pudo enviar el correo: $_" -ForegroundColor Red
+    }
+}
+$service = Get-Service -Name $Config.ServiceName -ErrorAction SilentlyContinue
+
+if (-not $service) {
+    Write-Host "[WARN] El servicio '$($Config.ServiceName)' no existe en $($Config.Server)." -ForegroundColor Red
+    exit
+}
+
+if ($service.Status -eq "Running") {
+    Write-Host "[INFO] $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - El servicio '$($Config.ServiceName)' se encuentra en ejecución (OK)." -ForegroundColor DarkGray
+    exit
+}
+Write-Host "[WARN] El servicio '$($Config.ServiceName)' está DETENIDO. Intentando iniciar..." -ForegroundColor Yellow
+
+try {
+    Start-Service -Name $Config.ServiceName -ErrorAction Stop
+    Start-Sleep -Seconds $Config.WaitSeconds
+    $service.Refresh()
+}
+catch {
+    Write-Host "[ERROR] Fallo crítico a iniciar Start-Service: $_" -ForegroundColor Red
+}
+$timestamp = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
+
+if ($service.Status -eq "Running") {
+    Write-Host "[SUCCESS] Servicio restaurado exitosamente." -ForegroundColor Green
+
+    $subject = "ALERTA [RECUPERADO]: Servicio $($Config.ServiceName) en $($Config.Server)"
+    $body = @"
+Hola,
+
+Se detectó que el servicio '$($Config.ServiceName)' estaba DETENIDO en el servidor '$($Config.Server)'.
+El monitor automático lo ha iniciado correctamente.
+
+Detalles:
+- Servidor: $($Config.Server)
+- Servicio: $($Config.ServiceName)
+- Fecha/Hora: $timestamp
+- Estado actual: EN EJECUCIÓN (Running)
+
+Saludos,
+Monitoreo TI
+"@
+    Send-NotificationEmail -Subject $subject -Body $body
+
+} else {
+    Write-Host "[CRITICAL] No se pudo recuperar el servicio." -ForegroundColor Red
+
+    $subject = "CRÍTICO [FALLO]: No se pudo iniciar el servicio $($Config.ServiceName) en $($Config.Server)"
+    $body = @"
+Hola,
+
+ALERTA CRÍTICA:
+Se intentó iniciar automáticamente el servicio '$($Config.ServiceName)' en '$($Config.Server)', pero SIGUE DETENIDO.
+
+Detalles:
+- Servidor: $($Config.Server)
+- Servicio: $($Config.ServiceName)
+- Fecha/Hora: $timestamp
+- Estado actual: NO INICIADO / DETENIDO
+
+Se requiere intervención manual inmediata.
+
+Saludos,
+Monitoreo TI
+"@
+    Send-NotificationEmail -Subject $subject -Body $body
+}
